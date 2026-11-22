@@ -234,7 +234,7 @@ function demo(){
     hab.forEach((h,i)=>{if((d*7+i*3+i*i)%5<3)log[ds][h.id]=1});
     mood[ds]={m:1+((d*3)%5),v:1+((d*2+1)%5)}}
   return {v:1,demo:true,updated:0,
-    settings:{cur:'₽',theme:'auto',remind:10,digest:true,digestTime:'20:00',semStart:`${m>=9||m<=1?(m>=9?y:y-1):y}-09-01`,semEnd:`${m>=9?y+1:y}-01-31`,notif:true},
+    settings:{cur:'₽',theme:'auto',remind:10,digest:true,digestTime:'20:00',morning:true,morningTime:'08:00',semStart:`${m>=9||m<=1?(m>=9?y:y-1):y}-09-01`,semEnd:`${m>=9?y+1:y}-01-31`,notif:true},
     quick:['Постирать вещи','Приготовить еду','Купить продукты','Уборка','Спорт','Позвонить родителям'],
     tasks:[
       {id:uid(),text:'Постирать вещи',date:t,time:'',done:true},
@@ -259,6 +259,7 @@ function blank(){const d=demo();d.demo=false;d.tasks=[];d.lessons=[];d.fin={};d.
 let S;
 function loadLocal(){try{const r=localStorage.getItem(KEY);if(r)return JSON.parse(r)}catch(e){}return null}
 S=loadLocal()||demo();
+S.settings=Object.assign({morning:true,morningTime:'08:00'},S.settings);
 const ui={tab:'today',date:todayStr(),fm:monthKey(todayStr()),hm:monthKey(todayStr()),finTab:'month',edit:null,bulk:false,showAllExp:false,lweek:0,ldate:todayStr()};
 try{const t=sessionStorage.getItem('tab');if(t)ui.tab=t}catch(e){}
 
@@ -334,6 +335,15 @@ async function cloudSync(){
     C.last=Date.now();C.err='';saveC();setSync('on');
   }catch(e){C.err=e.message;saveC();setSync('err');if(e.status===401||/refresh|invalid/i.test(e.message)){C.s=null;saveC()}}
   finally{cloudBusy=false}
+}
+async function tgCall(body){
+  if(!C.s||!C.url)throw new Error('Сначала включи синхронизацию');
+  await ensureSession();
+  let r;try{r=await fetch(C.url.replace(/\/+$/,'')+'/functions/v1/reminders',{method:'POST',headers:{'Content-Type':'application/json',apikey:C.key,Authorization:'Bearer '+C.s.access},body:JSON.stringify(body)})}
+  catch(e){throw new Error('Нет связи с облаком. Проверь интернет или VPN')}
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(r.status===404&&!j.error?'Функция reminders не найдена в Supabase. Проверь шаг с развёртыванием':(j.error||j.message||'Ошибка '+r.status));
+  return j;
 }
 function readCfg(){
   const t=$('#cfg');if(t&&t.value.trim()){const p=t.value.trim().split(/\s+/);const u=p.find(x=>/^https?:\/\//i.test(x));C.url=u;C.key=p.find(x=>x!==u)||C.key}
@@ -597,6 +607,13 @@ function viewMore(){
     <label class="f">Адрес проекта и ключ (через пробел)<textarea id="cfg" style="min-height:70px" placeholder="https://xxxx.supabase.co sb_publishable_...">${esc(C.url&&C.key?C.url+' '+C.key:'')}</textarea></label>
     <div class="fr" style="margin-top:10px"><label class="f">Почта<input type="text" id="cem" inputmode="email" autocomplete="username" value="${esc(C.email||'')}"></label><label class="f">Пароль (от 6 символов)<input type="password" id="cpw" autocomplete="current-password"></label></div>
     <div class="row" style="margin-top:12px;flex-wrap:wrap"><button class="btn" data-act="clogin">Войти</button><button class="btn soft" data-act="csignup">Создать аккаунт</button></div>`}</div>
+  <div class="card"><div class="hd"><h2>Уведомления в Telegram</h2><span class="pill ${st.tgOn&&st.tgChat?'ok':'warn'}"><i class="dot"></i>${st.tgOn&&st.tgChat?'Подключены':'Не подключены'}</span></div>
+    <p class="small muted" style="margin:0 0 10px">Приходят на телефон сами, даже когда приложение закрыто: за ${st.remind} мин до пары, на время дел, утренний план и вечерний обзор «что завтра».</p>
+    ${st.tgOn&&st.tgChat?`<div class="row" style="flex-wrap:wrap"><button class="btn soft" data-act="tgtest">Отправить тест</button><button class="btn ghost" data-act="tgoff">Отключить</button></div>
+      <div class="switch"><span>Утренний план дня</span><button class="cb" data-act="tgl" data-k="morning" aria-pressed="${st.morning!==false}" aria-label="Утренний план"></button></div>
+      <div class="fr"><label class="f">Время утреннего плана<input type="time" id="smt" value="${esc(st.morningTime||'08:00')}" data-chg="set" data-k="morningTime"></label></div>`
+    :(C.s?`<ol class="small" style="margin:0 0 12px;padding-left:18px;display:flex;flex-direction:column;gap:4px"><li>Открой в Telegram своего бота и нажми «Start» (или «Запустить»).</li><li>Вернись сюда и нажми кнопку ниже.</li></ol><button class="btn" data-act="tglink">Подключить Telegram</button>`
+    :`<p class="small" style="margin:0">Сначала включи синхронизацию (блок ниже): уведомления работают через твоё облако.</p>`)}</div>
   <div class="card"><div class="hd"><h2>Уведомления</h2><span class="pill ${perm==='granted'?'ok':'warn'}"><i class="dot"></i>${permTxt}</span></div>
     <div class="row" style="flex-wrap:wrap"><button class="btn" data-act="perm">Включить уведомления</button><button class="btn soft" data-act="testn">Проверить</button></div>
     <p class="small muted">Пока приложение открыто (вкладка или значок на экране), уведомления приходят сами: на время дел, перед парами и вечером про завтрашние занятия. Чтобы напоминания приходили и при закрытом приложении, сохрани календарь ниже: их доставит само устройство.</p>
@@ -759,7 +776,7 @@ const A={
     const ev=parseICS(txt);if(!ev.length)return toast('Занятий не найдено','Проверь, что это файл календаря .ics');S.ical=ev;S.demo=false;save();render();toast('Расписание загружено',ev.length+' занятий на ближайшие месяцы')},
   kstu(){kstuLoad(false)},
   icsclr(){S.ical=[];S.settings.kstuAuto=false;save();render()},
-  tgl(el){S.settings[el.dataset.k]=!S.settings[el.dataset.k];save();render()},
+  tgl(el){const k=el.dataset.k;S.settings[k]=k==='morning'?S.settings.morning===false:!S.settings[k];save();render()},
   async perm(){try{if(!('Notification'in window))throw 0;const r=await Notification.requestPermission();toast(r==='granted'?'Уведомления включены':'Не получилось',r==='granted'?'Теперь напоминания будут всплывать':'Браузер не дал разрешение. Календарь .ics сработает в любом случае.')}catch(e){toast('Здесь это недоступно','Открой приложение в обычной вкладке браузера или используй календарь .ics.')}render()},
   testn(){notify('Проверка','Так будут выглядеть напоминания')},
   icsexp(){saveFile('trekker-dnya.ics',buildICS())},
@@ -773,6 +790,9 @@ const A={
   cout(){C={url:C.url,key:C.key};saveC();setSync('local');render()},
   async ccopy(){try{await navigator.clipboard.writeText(C.url+' '+C.key);toast('Скопировано','Вставь это на другом устройстве в поле подключения')}catch(e){toast('Не получилось скопировать',C.url+' '+C.key)}},
   pavdel(){S.profile=Object.assign(prof(),{avatar:''});save();render()},
+  async tglink(){try{const j=await tgCall({action:'link'});S.settings.tgChat=j.chat;S.settings.tgOn=true;save();await cloudSync();await tgCall({action:'test',chat:j.chat});render();toast('Telegram подключён','Тестовое сообщение отправлено'+(j.name?', '+j.name:''))}catch(e){toast('Не удалось подключить',e.message)}},
+  async tgtest(){try{await tgCall({action:'test',chat:S.settings.tgChat});toast('Отправлено','Проверь Telegram')}catch(e){toast('Не получилось',e.message)}},
+  tgoff(){S.settings.tgOn=false;S.settings.tgChat='';save();render()},
   demo(){const p=S.profile;S=demo();if(p)S.profile=p;save();render()},
   clear(){const p=S.profile;S=blank();if(p)S.profile=p;save();render();toast('Чистый лист','Все примеры удалены')},
   async mic(){if(!dict)return;const i=$('#qa');try{dict.onFinal(({text})=>{const q=$('#qa');if(q)q.value=(q.value+' '+text).trim()});await dict.start()}catch(e){}}
