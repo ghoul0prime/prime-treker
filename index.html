@@ -571,6 +571,7 @@ function viewClasses(){
     <div class="fr" style="margin-top:10px"><label class="f" style="grid-column:1/-1">Предмет<input type="text" id="lt" placeholder="Название пары"></label><label class="f">Аудитория<input type="text" id="lr" placeholder="ауд. 305"></label><label class="f">Преподаватель<input type="text" id="lp"></label></div>
     <div class="row" style="margin-top:12px"><button class="btn" data-act="ladd">Добавить</button></div></div>
     <div class="card"><div class="hd"><h2>Подключить расписание вуза</h2></div>
+      <div class="row" style="margin:0 0 12px;flex-wrap:wrap"><button class="btn" data-act="kstu">Загрузить расписание КНИТУ (561-61 ИП)</button>${S.settings.kstuAuto?'<span class="pill ok">Обновляется само</span>':''}</div>
       <p class="small muted" style="margin:0 0 10px">Большинство вузов дают расписание в формате календаря (.ics): в личном кабинете или на сайте расписания ищи «Экспорт» или «Добавить в календарь». Загрузи файл сюда, пары разложатся по датам с учётом повторов.</p>
       <label class="f">Файл календаря<input type="file" id="icsf" accept=".ics,text/calendar"></label>
       <label class="f" style="margin-top:10px">Или вставь текст .ics<textarea id="icst" placeholder="BEGIN:VCALENDAR…"></textarea></label>
@@ -756,7 +757,8 @@ const A={
   ldel(el){S.lessons=S.lessons.filter(l=>l.id!==el.dataset.id);save();render()},
   async icsimp(){let txt=$('#icst').value;const f=$('#icsf').files[0];if(f)txt=await f.text();if(!txt.trim())return toast('Нечего импортировать','Выбери файл .ics или вставь его текст');
     const ev=parseICS(txt);if(!ev.length)return toast('Занятий не найдено','Проверь, что это файл календаря .ics');S.ical=ev;S.demo=false;save();render();toast('Расписание загружено',ev.length+' занятий на ближайшие месяцы')},
-  icsclr(){S.ical=[];save();render()},
+  kstu(){kstuLoad(false)},
+  icsclr(){S.ical=[];S.settings.kstuAuto=false;save();render()},
   tgl(el){S.settings[el.dataset.k]=!S.settings[el.dataset.k];save();render()},
   async perm(){try{if(!('Notification'in window))throw 0;const r=await Notification.requestPermission();toast(r==='granted'?'Уведомления включены':'Не получилось',r==='granted'?'Теперь напоминания будут всплывать':'Браузер не дал разрешение. Календарь .ics сработает в любом случае.')}catch(e){toast('Здесь это недоступно','Открой приложение в обычной вкладке браузера или используй календарь .ics.')}render()},
   testn(){notify('Проверка','Так будут выглядеть напоминания')},
@@ -811,14 +813,30 @@ document.addEventListener('keydown',e=>{
 });
 function applyTheme(){const t=S.settings.theme;if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);else document.documentElement.removeAttribute('data-theme')}
 
+/* ---------- расписание КНИТУ: автозагрузка ---------- */
+async function kstuLoad(silent){
+  try{
+    const r=await fetch('schedule.ics',{cache:'no-store'});
+    if(!r.ok)throw new Error(r.status);
+    const ev=parseICS(await r.text());
+    if(!ev.length){if(!silent)toast('Занятий не найдено','Расписание сейчас пустое или недоступно');return}
+    S.ical=ev;S.demo=false;S.settings.kstuAuto=true;S.settings.kstuAt=Date.now();save();
+    const ae=document.activeElement;
+    if(!silent||!ae||!/INPUT|TEXTAREA|SELECT/.test(ae.tagName))render();
+    if(!silent)toast('Расписание загружено',ev.length+' занятий, дальше обновляется само');
+  }catch(e){if(!silent)toast('Не удалось загрузить','Проверь интернет и попробуй ещё раз')}
+}
+function kstuAuto(){if(S.settings.kstuAuto&&Date.now()-(S.settings.kstuAt||0)>6*3600*1000)kstuLoad(true)}
+
 /* ---------- boot ---------- */
 applyTheme();render();tick();setInterval(tick,15000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)tick()});
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 initSync();
+kstuAuto();
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)kstuAuto()});
 cloudSync();setInterval(cloudSync,60000);
 addEventListener('online',cloudSync);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)cloudSync()});
 </script>
 </body></html>
-<a href="webcal://prime-treker.netlify.app/schedule.ics">📅 Добавить расписание в календарь</a>
