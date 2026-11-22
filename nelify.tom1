@@ -1,7 +1,0 @@
-[functions]
-  directory = "netlify/functions"
-
-[[redirects]]
-  from = "/schedule.ics"
-  to = "/.netlify/functions/schedule"
-  status = 200
